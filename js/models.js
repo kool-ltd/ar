@@ -2,8 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { scene } from './scene.js';
 
-// Constants
-const REAL_WORLD_LENGTH = 0.35; // Adjusted for mandoline size
+const REAL_WORLD_LENGTH = 0.35;
 
 export let models = { 
     blade: null, 
@@ -13,6 +12,7 @@ export let models = {
 };
 export let modelContainer;
 export let originalPositions = new Map();
+export let placedGroups = [];
 
 export async function loadModels() {
     const loader = new GLTFLoader();
@@ -33,6 +33,12 @@ export async function loadModels() {
     };
 
     try {
+        // Load each part into its own group
+        const blade = new THREE.Group();
+        const frame = new THREE.Group();
+        const handguard = new THREE.Group();
+        const handle = new THREE.Group();
+
         const [bladePart, framePart, handguardPart, handlePart] = await Promise.all([
             loadPart('./kool-mandoline-blade.glb'),
             loadPart('./kool-mandoline-frame.glb'),
@@ -40,13 +46,41 @@ export async function loadModels() {
             loadPart('./kool-mandoline-handletpe.glb')
         ]);
 
-        setupModelParts(bladePart, framePart, handguardPart, handlePart);
+        // Set up each part in its own group
+        blade.add(bladePart);
+        frame.add(framePart);
+        handguard.add(handguardPart);
+        handle.add(handlePart);
+
+        // Set names and userData for identification
+        blade.name = 'blade';
+        frame.name = 'frame';
+        handguard.name = 'handguard';
+        handle.name = 'handle';
+
+        blade.userData.type = 'movable';
+        frame.userData.type = 'movable';
+        handguard.userData.type = 'movable';
+        handle.userData.type = 'movable';
+
+        // Store in models object
+        models.blade = blade;
+        models.frame = frame;
+        models.handguard = handguard;
+        models.handle = handle;
+
+        // Add to container
+        modelContainer.add(blade);
+        modelContainer.add(frame);
+        modelContainer.add(handguard);
+        modelContainer.add(handle);
+
+        // Scale and position
         scaleAndPositionModel();
         storeOriginalPositions();
 
-        const previewModel = modelContainer.clone();
-        previewModel.position.set(0, 0, 0);
-        scene.add(previewModel);
+        // Add to scene
+        scene.add(modelContainer);
 
         document.getElementById('loading-text').style.display = 'none';
         console.log('All models loaded successfully');
@@ -55,40 +89,6 @@ export async function loadModels() {
         console.error('Error loading models:', error);
         document.getElementById('loading-text').textContent = 'Error loading models';
     }
-}
-
-function setupModelParts(bladePart, framePart, handguardPart, handlePart) {
-    // Ensure names are set at the top level of each part
-    bladePart.name = 'blade';
-    framePart.name = 'frame';
-    handguardPart.name = 'handguard';
-    handlePart.name = 'handle';
-
-    // Make sure all children inherit the name
-    bladePart.traverse(child => child.name = 'blade');
-    framePart.traverse(child => child.name = 'frame');
-    handguardPart.traverse(child => child.name = 'handguard');
-    handlePart.traverse(child => child.name = 'handle');
-
-    // Add parts to models object
-    models.blade = bladePart;
-    models.frame = framePart;
-    models.handguard = handguardPart;
-    models.handle = handlePart;
-
-    // Add to container
-    modelContainer.add(bladePart);
-    modelContainer.add(framePart);
-    modelContainer.add(handguardPart);
-    modelContainer.add(handlePart);
-
-    // Log for debugging
-    console.log('Parts setup complete:', {
-        blade: bladePart,
-        frame: framePart,
-        handguard: handguardPart,
-        handle: handlePart
-    });
 }
 
 function scaleAndPositionModel() {
@@ -103,16 +103,16 @@ function scaleAndPositionModel() {
 }
 
 function storeOriginalPositions() {
-    for (const part of [models.blade, models.frame, models.handguard, models.handle]) {
+    Object.values(models).forEach(part => {
         originalPositions.set(part.name, {
             position: part.position.clone(),
             rotation: part.rotation.clone()
         });
-    }
+    });
 }
 
-export function resetPartPositions(container) {
-    container.children.forEach(part => {
+export function resetPartPositions() {
+    Object.values(models).forEach(part => {
         const originalPos = originalPositions.get(part.name);
         if (originalPos) {
             part.position.copy(originalPos.position);
