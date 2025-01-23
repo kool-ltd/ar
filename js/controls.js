@@ -7,17 +7,24 @@ export let controls;
 let selectedObject = null;
 let isMoving = false;
 const initialTouchPosition = new THREE.Vector2();
+const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0));
+const dragOffset = new THREE.Vector3();
 
 export function initControls() {
     controls = new OrbitControls(camera, renderer.domElement);
     controls.target.set(0, 0.1, 0);
     controls.update();
+    
+    // Disable OrbitControls when interacting with objects
+    controls.enableRotate = true;
+    controls.enablePan = true;
+    controls.enableZoom = true;
 }
 
 export function setupEventListeners() {
-    renderer.domElement.addEventListener('touchstart', onTouchStart);
-    renderer.domElement.addEventListener('touchmove', onTouchMove);
-    renderer.domElement.addEventListener('touchend', onTouchEnd);
+    renderer.domElement.addEventListener('touchstart', onTouchStart, false);
+    renderer.domElement.addEventListener('touchmove', onTouchMove, false);
+    renderer.domElement.addEventListener('touchend', onTouchEnd, false);
 
     document.getElementById('reset-button').addEventListener('click', () => {
         placedModels.forEach(container => {
@@ -35,52 +42,82 @@ function findSelectedObject(x, y) {
     
     raycaster.setFromCamera(touch, camera);
     
-    const allParts = [];
-    scene.children.forEach(child => {
-        if (child.type === 'Group') {
-            child.children.forEach(part => {
-                allParts.push(part);
-            });
+    // Get all interactive objects in the scene
+    const interactiveObjects = [];
+    scene.traverse((object) => {
+        if (object.isMesh || object.isGroup) {
+            interactiveObjects.push(object);
         }
     });
     
-    const intersects = raycaster.intersectObjects(allParts, true);
+    const intersects = raycaster.intersectObjects(interactiveObjects, true);
+    
     if (intersects.length > 0) {
         let object = intersects[0].object;
-        while (object.parent && !allParts.includes(object)) {
+        
+        // Traverse up the parent hierarchy until we find the main part
+        while (object.parent && !['blade', 'frame', 'handguard', 'handle'].includes(object.name)) {
             object = object.parent;
         }
+        
         return object;
     }
     return null;
 }
 
 function onTouchStart(event) {
+    event.preventDefault();
+    
     if (event.touches.length === 1) {
         isMoving = true;
-        initialTouchPosition.set(
-            event.touches[0].pageX,
-            event.touches[0].pageY
-        );
-        selectedObject = findSelectedObject(event.touches[0].pageX, event.touches[0].pageY);
+        const touch = event.touches[0];
+        initialTouchPosition.set(touch.pageX, touch.pageY);
+        
+        selectedObject = findSelectedObject(touch.pageX, touch.pageY);
+        
+        if (selectedObject) {
+            controls.enabled = false;
+            
+            // Store the offset between touch point and object position
+            const raycaster = new THREE.Raycaster();
+            const touchPoint = new THREE.Vector2(
+                (touch.pageX / window.innerWidth) * 2 - 1,
+                -(touch.pageY / window.innerHeight) * 2 + 1
+            );
+            raycaster.setFromCamera(touchPoint, camera);
+            
+            const intersectPoint = new THREE.Vector3();
+            raycaster.ray.intersectPlane(dragPlane, intersectPoint);
+            dragOffset.subVectors(selectedObject.position, intersectPoint);
+        }
     }
 }
 
 function onTouchMove(event) {
+    event.preventDefault();
+
     if (!selectedObject) return;
 
-    if (isMoving && event.touches.length === 1) {
+    if (event.touches.length === 1 && isMoving) {
         const touch = event.touches[0];
-        const deltaX = (touch.pageX - initialTouchPosition.x) * 0.002;
-        const deltaZ = (touch.pageY - initialTouchPosition.y) * 0.002;
-
-        selectedObject.position.x += deltaX;
-        selectedObject.position.z += deltaZ;
-
-        initialTouchPosition.set(touch.pageX, touch.pageY);
+        const raycaster = new THREE.Raycaster();
+        const touchPoint = new THREE.Vector2(
+            (touch.pageX / window.innerWidth) * 2 - 1,
+            -(touch.pageY / window.innerHeight) * 2 + 1
+        );
+        raycaster.setFromCamera(touchPoint, camera);
+        
+        const intersectPoint = new THREE.Vector3();
+        raycaster.ray.intersectPlane(dragPlane, intersectPoint);
+        
+        // Apply the stored offset to maintain relative position
+        selectedObject.position.copy(intersectPoint.add(dragOffset));
+        
     } else if (event.touches.length === 2) {
+        // Handle rotation with two fingers
         const touch1 = event.touches[0];
         const touch2 = event.touches[1];
+        
         const rotation = Math.atan2(
             touch2.pageY - touch1.pageY,
             touch2.pageX - touch1.pageX
@@ -92,7 +129,18 @@ function onTouchMove(event) {
     }
 }
 
-function onTouchEnd() {
+function onTouchEnd(event) {
+    event.preventDefault();
+    
     isMoving = false;
-    selectedObject = null;
+    if (selectedObject) {
+        controls.enabled = true;
+        selectedObject = null;
+    }
+}
+
+export function updateControls() {
+    if (controls) {
+        controls.update();
+    }
 }
