@@ -1,30 +1,23 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { camera, renderer, scene } from './scene.js';
-import { resetPartPositions } from './models.js';
+import { resetPartPositions, models } from './models.js';
 
 export let controls;
 let selectedObject = null;
 let isMoving = false;
 const initialTouchPosition = new THREE.Vector2();
-const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0));
-const dragOffset = new THREE.Vector3();
 
 export function initControls() {
     controls = new OrbitControls(camera, renderer.domElement);
     controls.target.set(0, 0.1, 0);
     controls.update();
-    
-    // Disable OrbitControls when interacting with objects
-    controls.enableRotate = true;
-    controls.enablePan = true;
-    controls.enableZoom = true;
 }
 
 export function setupEventListeners() {
-    renderer.domElement.addEventListener('touchstart', onTouchStart, false);
-    renderer.domElement.addEventListener('touchmove', onTouchMove, false);
-    renderer.domElement.addEventListener('touchend', onTouchEnd, false);
+    renderer.domElement.addEventListener('touchstart', onTouchStart);
+    renderer.domElement.addEventListener('touchmove', onTouchMove);
+    renderer.domElement.addEventListener('touchend', onTouchEnd);
 
     document.getElementById('reset-button').addEventListener('click', () => {
         placedModels.forEach(container => {
@@ -42,24 +35,29 @@ function findSelectedObject(x, y) {
     
     raycaster.setFromCamera(touch, camera);
     
-    // Get all interactive objects in the scene
-    const interactiveObjects = [];
+    // Create array of all meshes from each part
+    const selectableParts = [];
     scene.traverse((object) => {
-        if (object.isMesh || object.isGroup) {
-            interactiveObjects.push(object);
+        if (object.isMesh) {
+            // Check if this mesh belongs to one of our parts
+            const partNames = ['blade', 'frame', 'handguard', 'handle'];
+            for (const name of partNames) {
+                if (object.parent && object.parent.name === name) {
+                    selectableParts.push(object);
+                    break;
+                }
+            }
         }
     });
-    
-    const intersects = raycaster.intersectObjects(interactiveObjects, true);
+
+    const intersects = raycaster.intersectObjects(selectableParts, false);
     
     if (intersects.length > 0) {
+        // Find the root part object (blade, frame, handguard, or handle)
         let object = intersects[0].object;
-        
-        // Traverse up the parent hierarchy until we find the main part
-        while (object.parent && !['blade', 'frame', 'handguard', 'handle'].includes(object.name)) {
+        while (object.parent && object.parent !== scene) {
             object = object.parent;
         }
-        
         return object;
     }
     return null;
@@ -69,26 +67,15 @@ function onTouchStart(event) {
     event.preventDefault();
     
     if (event.touches.length === 1) {
-        isMoving = true;
         const touch = event.touches[0];
+        isMoving = true;
         initialTouchPosition.set(touch.pageX, touch.pageY);
         
-        selectedObject = findSelectedObject(touch.pageX, touch.pageY);
-        
-        if (selectedObject) {
+        const newSelectedObject = findSelectedObject(touch.pageX, touch.pageY);
+        if (newSelectedObject) {
+            selectedObject = newSelectedObject;
             controls.enabled = false;
-            
-            // Store the offset between touch point and object position
-            const raycaster = new THREE.Raycaster();
-            const touchPoint = new THREE.Vector2(
-                (touch.pageX / window.innerWidth) * 2 - 1,
-                -(touch.pageY / window.innerHeight) * 2 + 1
-            );
-            raycaster.setFromCamera(touchPoint, camera);
-            
-            const intersectPoint = new THREE.Vector3();
-            raycaster.ray.intersectPlane(dragPlane, intersectPoint);
-            dragOffset.subVectors(selectedObject.position, intersectPoint);
+            console.log('Selected part:', selectedObject.name); // Debug log
         }
     }
 }
@@ -96,51 +83,38 @@ function onTouchStart(event) {
 function onTouchMove(event) {
     event.preventDefault();
 
-    if (!selectedObject) return;
+    if (!selectedObject || !isMoving) return;
 
-    if (event.touches.length === 1 && isMoving) {
+    if (event.touches.length === 1) {
         const touch = event.touches[0];
-        const raycaster = new THREE.Raycaster();
-        const touchPoint = new THREE.Vector2(
-            (touch.pageX / window.innerWidth) * 2 - 1,
-            -(touch.pageY / window.innerHeight) * 2 + 1
-        );
-        raycaster.setFromCamera(touchPoint, camera);
-        
-        const intersectPoint = new THREE.Vector3();
-        raycaster.ray.intersectPlane(dragPlane, intersectPoint);
-        
-        // Apply the stored offset to maintain relative position
-        selectedObject.position.copy(intersectPoint.add(dragOffset));
+        const deltaX = (touch.pageX - initialTouchPosition.x) * 0.01;
+        const deltaZ = (touch.pageY - initialTouchPosition.y) * 0.01;
+
+        // Move the selected part
+        selectedObject.position.x += deltaX;
+        selectedObject.position.z += deltaZ;
+
+        initialTouchPosition.set(touch.pageX, touch.pageY);
         
     } else if (event.touches.length === 2) {
-        // Handle rotation with two fingers
         const touch1 = event.touches[0];
         const touch2 = event.touches[1];
         
+        // Calculate rotation based on two-finger gesture
         const rotation = Math.atan2(
             touch2.pageY - touch1.pageY,
             touch2.pageX - touch1.pageX
         );
         
-        if (selectedObject) {
-            selectedObject.rotation.y = rotation;
-        }
+        selectedObject.rotation.y = rotation;
     }
 }
 
 function onTouchEnd(event) {
     event.preventDefault();
-    
     isMoving = false;
     if (selectedObject) {
         controls.enabled = true;
         selectedObject = null;
-    }
-}
-
-export function updateControls() {
-    if (controls) {
-        controls.update();
     }
 }
