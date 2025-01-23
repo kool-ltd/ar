@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { camera, renderer, scene } from './scene.js';
-import { resetPartPositions, models } from './models.js';
+import { resetPartPositions } from './models.js';
 
 export let controls;
 let selectedObject = null;
@@ -16,47 +16,42 @@ export function initControls() {
 }
 
 export function setupEventListeners() {
-    renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: false });
-    renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
-    renderer.domElement.addEventListener('touchend', onTouchEnd, { passive: false });
+    renderer.domElement.addEventListener('touchstart', onTouchStart);
+    renderer.domElement.addEventListener('touchmove', onTouchMove);
+    renderer.domElement.addEventListener('touchend', onTouchEnd);
 
     document.getElementById('reset-button').addEventListener('click', () => {
-        resetPartPositions();
+        placedModels.forEach(container => {
+            resetPartPositions(container);
+        });
     });
 }
 
-function getPartFromMesh(mesh) {
-    // Traverse up the parent hierarchy until we find the root part
-    let current = mesh;
-    while (current && !current.isGroup) {
-        current = current.parent;
-    }
-    return current;
-}
-
-function findTouchedObject(event) {
-    const touch = event.touches[0];
-    const rect = renderer.domElement.getBoundingClientRect();
-    const x = ((touch.clientX - rect.left) / rect.width) * 2 - 1;
-    const y = -((touch.clientY - rect.top) / rect.height) * 2 + 1;
-
-    raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
-
-    // Get all meshes in the scene
-    const meshes = [];
+function findSelectedObject(x, y) {
+    const touch = new THREE.Vector2();
+    touch.x = (x / window.innerWidth) * 2 - 1;
+    touch.y = -(y / window.innerHeight) * 2 + 1;
+    
+    raycaster.setFromCamera(touch, camera);
+    
+    // Get all meshes that could be selected
+    const selectableMeshes = [];
     scene.traverse((object) => {
-        if (object.isMesh) {
-            meshes.push(object);
+        // Check if it's a mesh and has a name that matches our parts
+        if (object.isMesh && ['left', 'body', 'right'].includes(object.parent.name)) {
+            selectableMeshes.push(object);
         }
     });
-
-    const intersects = raycaster.intersectObjects(meshes, false);
+    
+    const intersects = raycaster.intersectObjects(selectableMeshes, true);
     
     if (intersects.length > 0) {
-        const part = getPartFromMesh(intersects[0].object);
-        if (part && part.isGroup) {
-            return part;
+        // Find the parent object (the part group)
+        let selectedPart = intersects[0].object;
+        while (selectedPart.parent && !['left', 'body', 'right'].includes(selectedPart.name)) {
+            selectedPart = selectedPart.parent;
         }
+        return selectedPart;
     }
     return null;
 }
@@ -69,10 +64,10 @@ function onTouchStart(event) {
         isMoving = true;
         initialTouchPosition.set(touch.pageX, touch.pageY);
         
-        selectedObject = findTouchedObject(event);
+        selectedObject = findSelectedObject(touch.pageX, touch.pageY);
         if (selectedObject) {
             controls.enabled = false;
-            console.log('Selected:', selectedObject.name); // Debug logging
+            console.log('Selected part:', selectedObject.name); // Debug logging
         }
     }
 }
@@ -80,34 +75,30 @@ function onTouchStart(event) {
 function onTouchMove(event) {
     event.preventDefault();
 
+    if (!selectedObject || !isMoving) return;
+
     if (event.touches.length === 1) {
         const touch = event.touches[0];
+        const deltaX = (touch.pageX - initialTouchPosition.x) * 0.002;
+        const deltaZ = (touch.pageY - initialTouchPosition.y) * 0.002;
+
+        // Move only the selected part
+        selectedObject.position.x += deltaX;
+        selectedObject.position.z += deltaZ;
+
+        initialTouchPosition.set(touch.pageX, touch.pageY);
         
-        if (isMoving) {
-            const deltaX = (touch.pageX - initialTouchPosition.x) * 0.002;
-            const deltaZ = (touch.pageY - initialTouchPosition.y) * 0.002;
-
-            if (selectedObject) {
-                // Move only the selected part
-                selectedObject.position.x += deltaX;
-                selectedObject.position.z += deltaZ;
-            }
-
-            initialTouchPosition.set(touch.pageX, touch.pageY);
-        }
     } else if (event.touches.length === 2) {
         // Handle rotation with two fingers
         const touch1 = event.touches[0];
         const touch2 = event.touches[1];
         
-        const angle = Math.atan2(
+        const rotation = Math.atan2(
             touch2.pageY - touch1.pageY,
             touch2.pageX - touch1.pageX
         );
         
-        if (selectedObject) {
-            selectedObject.rotation.y = angle;
-        }
+        selectedObject.rotation.y = rotation;
     }
 }
 
