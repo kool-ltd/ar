@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { scene } from './scene.js';
 
+// Constants
 const REAL_WORLD_LENGTH = 0.35;
 
 export let models = { 
@@ -12,7 +13,6 @@ export let models = {
 };
 export let modelContainer;
 export let originalPositions = new Map();
-export let placedGroups = [];
 
 export async function loadModels() {
     const loader = new GLTFLoader();
@@ -33,12 +33,6 @@ export async function loadModels() {
     };
 
     try {
-        // Load each part into its own group
-        const blade = new THREE.Group();
-        const frame = new THREE.Group();
-        const handguard = new THREE.Group();
-        const handle = new THREE.Group();
-
         const [bladePart, framePart, handguardPart, handlePart] = await Promise.all([
             loadPart('./kool-mandoline-blade.glb'),
             loadPart('./kool-mandoline-frame.glb'),
@@ -46,41 +40,13 @@ export async function loadModels() {
             loadPart('./kool-mandoline-handletpe.glb')
         ]);
 
-        // Set up each part in its own group
-        blade.add(bladePart);
-        frame.add(framePart);
-        handguard.add(handguardPart);
-        handle.add(handlePart);
-
-        // Set names and userData for identification
-        blade.name = 'blade';
-        frame.name = 'frame';
-        handguard.name = 'handguard';
-        handle.name = 'handle';
-
-        blade.userData.type = 'movable';
-        frame.userData.type = 'movable';
-        handguard.userData.type = 'movable';
-        handle.userData.type = 'movable';
-
-        // Store in models object
-        models.blade = blade;
-        models.frame = frame;
-        models.handguard = handguard;
-        models.handle = handle;
-
-        // Add to container
-        modelContainer.add(blade);
-        modelContainer.add(frame);
-        modelContainer.add(handguard);
-        modelContainer.add(handle);
-
-        // Scale and position
+        setupModelParts(bladePart, framePart, handguardPart, handlePart);
         scaleAndPositionModel();
         storeOriginalPositions();
 
-        // Add to scene
-        scene.add(modelContainer);
+        const previewModel = modelContainer.clone();
+        previewModel.position.set(0, 0, 0);
+        scene.add(previewModel);
 
         document.getElementById('loading-text').style.display = 'none';
         console.log('All models loaded successfully');
@@ -89,6 +55,42 @@ export async function loadModels() {
         console.error('Error loading models:', error);
         document.getElementById('loading-text').textContent = 'Error loading models';
     }
+}
+
+// Add this function to your models.js
+function setupModelParts(bladePart, framePart, handguardPart, handlePart) {
+    // Create groups for each part
+    const bladeGroup = new THREE.Group();
+    const frameGroup = new THREE.Group();
+    const handguardGroup = new THREE.Group();
+    const handleGroup = new THREE.Group();
+
+    // Set names
+    bladeGroup.name = 'blade';
+    frameGroup.name = 'frame';
+    handguardGroup.name = 'handguard';
+    handleGroup.name = 'handle';
+
+    // Add parts to their respective groups
+    bladeGroup.add(bladePart);
+    frameGroup.add(framePart);
+    handguardGroup.add(handguardPart);
+    handleGroup.add(handlePart);
+
+    // Store in models object
+    models.blade = bladeGroup;
+    models.frame = frameGroup;
+    models.handguard = handguardGroup;
+    models.handle = handleGroup;
+
+    // Add to container
+    modelContainer.add(bladeGroup);
+    modelContainer.add(frameGroup);
+    modelContainer.add(handguardGroup);
+    modelContainer.add(handleGroup);
+
+    // Log for debugging
+    console.log('Models setup complete:', models);
 }
 
 function scaleAndPositionModel() {
