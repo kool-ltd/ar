@@ -58,20 +58,37 @@ export async function loadModels() {
 }
 
 function setupModelParts(bladePart, framePart, handguardPart, handlePart) {
+    // Ensure names are set at the top level of each part
     bladePart.name = 'blade';
     framePart.name = 'frame';
     handguardPart.name = 'handguard';
     handlePart.name = 'handle';
 
+    // Make sure all children inherit the name
+    bladePart.traverse(child => child.name = 'blade');
+    framePart.traverse(child => child.name = 'frame');
+    handguardPart.traverse(child => child.name = 'handguard');
+    handlePart.traverse(child => child.name = 'handle');
+
+    // Add parts to models object
     models.blade = bladePart;
     models.frame = framePart;
     models.handguard = handguardPart;
     models.handle = handlePart;
 
+    // Add to container
     modelContainer.add(bladePart);
     modelContainer.add(framePart);
     modelContainer.add(handguardPart);
     modelContainer.add(handlePart);
+
+    // Log for debugging
+    console.log('Parts setup complete:', {
+        blade: bladePart,
+        frame: framePart,
+        handguard: handguardPart,
+        handle: handlePart
+    });
 }
 
 function scaleAndPositionModel() {
