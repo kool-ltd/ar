@@ -3,9 +3,14 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { scene } from './scene.js';
 
 // Constants
-const REAL_WORLD_LENGTH = 0.045;
+const REAL_WORLD_LENGTH = 0.35; // Adjusted for mandoline size
 
-export let models = { left: null, body: null, right: null };
+export let models = { 
+    blade: null, 
+    frame: null, 
+    handguard: null, 
+    handle: null 
+};
 export let modelContainer;
 export let originalPositions = new Map();
 
@@ -28,13 +33,14 @@ export async function loadModels() {
     };
 
     try {
-        const [leftPart, bodyPart, rightPart] = await Promise.all([
-            loadPart('./241218 - tchibo - 4 in 1 rolling pin-L.glb'),
-            loadPart('./241218 - tchibo - 4 in 1 rolling pin-body.glb'),
-            loadPart('./241218 - tchibo - 4 in 1 rolling pin-R.glb')
+        const [bladePart, framePart, handguardPart, handlePart] = await Promise.all([
+            loadPart('./kool-mandoline-blade.glb'),
+            loadPart('./kool-mandoline-frame.glb'),
+            loadPart('./kool-mandoline-handguard.glb'),
+            loadPart('./kool-mandoline-handletpe.glb')
         ]);
 
-        setupModelParts(leftPart, bodyPart, rightPart);
+        setupModelParts(bladePart, framePart, handguardPart, handlePart);
         scaleAndPositionModel();
         storeOriginalPositions();
 
@@ -51,18 +57,21 @@ export async function loadModels() {
     }
 }
 
-function setupModelParts(leftPart, bodyPart, rightPart) {
-    leftPart.name = 'left';
-    bodyPart.name = 'body';
-    rightPart.name = 'right';
+function setupModelParts(bladePart, framePart, handguardPart, handlePart) {
+    bladePart.name = 'blade';
+    framePart.name = 'frame';
+    handguardPart.name = 'handguard';
+    handlePart.name = 'handle';
 
-    models.left = leftPart;
-    models.body = bodyPart;
-    models.right = rightPart;
+    models.blade = bladePart;
+    models.frame = framePart;
+    models.handguard = handguardPart;
+    models.handle = handlePart;
 
-    modelContainer.add(leftPart);
-    modelContainer.add(bodyPart);
-    modelContainer.add(rightPart);
+    modelContainer.add(bladePart);
+    modelContainer.add(framePart);
+    modelContainer.add(handguardPart);
+    modelContainer.add(handlePart);
 }
 
 function scaleAndPositionModel() {
@@ -77,7 +86,7 @@ function scaleAndPositionModel() {
 }
 
 function storeOriginalPositions() {
-    for (const part of [models.left, models.body, models.right]) {
+    for (const part of [models.blade, models.frame, models.handguard, models.handle]) {
         originalPositions.set(part.name, {
             position: part.position.clone(),
             rotation: part.rotation.clone()
